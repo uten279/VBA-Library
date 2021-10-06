@@ -2,7 +2,7 @@ VERSION 1.0 CLASS
 BEGIN
   MultiUse = -1  'True
 END
-Attribute VB_Name = "SQLServer"
+Attribute VB_Name = "SQLite3"
 Attribute VB_GlobalNameSpace = False
 Attribute VB_Creatable = False
 Attribute VB_PredeclaredId = False
@@ -29,47 +29,25 @@ Private Sub Class_Terminate()
     End If
 End Sub
 
-Public Sub ConnectServerAuth(data_source As String, initial_catalog As String, user_id As String, user_password As String)
+Public Sub Execute(sql)
     Call ReadyCheck
-    Call Class_Terminate
-
-    Dim s As String2
-    
-    Set s = Init(New String2, "Provider=SQLOLEDB;Data Source={0};Initial Catalog={1};UID={2};PWD={3};")
-
-    mCn.ConnectionString = s.Format(data_source, initial_catalog, user_id, user_password)
-    mCn.Open
-End Sub
-
-Public Sub ConnectWindowsAuth(data_source As String, initial_catalog As String)
-    Call ReadyCheck
-    Call Class_Terminate
-    
-    Dim s As String2
-    
-    Set s = Init(New String2, "Provider=SQLOLEDB;Data Source={0};Initial Catalog={1};Trusted_Connection=Yes;")
-    
-    mCn.ConnectionString = s.Format(data_source, initial_catalog)
-    mCn.Open
-End Sub
-
-Public Sub Execute(sql As String)
-    Call ReadyCheck
-    
-    If (mCn.State And 1) <> 1 Then
-        Call ErrRaise(515)
-    End If
 
     mCn.Execute sql
 End Sub
 
-Private Function IClass_Constructor(args() As Variant) As Object
+Private Function IClass_Constructor(x() As Variant) As Object
     If mReady Then
         Call ErrRaise(513)
     End If
-        
+    
+    If Not CanUsed() Then
+        Call ErrRaise(516)
+    End If
+    
     Set mCn = CreateObject("ADODB.Connection")
     Set mRs = CreateObject("ADODB.Recordset")
+    
+    mCn.Open ConnectionString:="DRIVER=SQLite3 ODBC Driver; DataBase=" & x(0)
     
     mReady = True
     
@@ -78,14 +56,6 @@ End Function
 
 Public Function Query(sql As String) As Object
     Call ReadyCheck
-    
-    If mCn Is Nothing Then
-        Call ErrRaise(515)
-    End If
-    
-    If (mCn.State And 1) <> 1 Then
-        Call ErrRaise(515)
-    End If
 
     If (mRs.State And 1) = 1 Then
         mRs.Close
@@ -95,6 +65,30 @@ Public Function Query(sql As String) As Object
     mRs.Open sql, mCn
     
     Set Query = mRs
+End Function
+
+Public Function TableExists(name_1 As String) As Boolean
+    Call ReadyCheck
+    
+    Dim rs As Object
+    Dim sql As String
+    
+    sql = ""
+    sql = sql & " SELECT"
+    sql = sql & "     name"
+    sql = sql & " FROM"
+    sql = sql & "     sqlite_master"
+    sql = sql & " WHERE"
+    sql = sql & "     type = 'table'"
+    sql = sql & " AND name = '" & name_1 & "'"
+    
+    mCn.CursorLocation = 3  ' adUseClient
+    Set rs = mCn.Execute(sql)
+    
+    TableExists = rs.RecordCount > 0
+    
+    rs.Close
+    Set rs = Nothing
 End Function
 
 ' ----- >
@@ -107,15 +101,23 @@ Private Sub ErrRaise(e As Long)
             Err.Raise e, TypeName(Me), "Please initialize."
         Case 515:
             Err.Raise e, TypeName(Me), "Please connect to the database."
+        Case 516:
+            Err.Raise e, TypeName(Me), "Please install SQLite ODBC driver(32&64). -> http://www.ch-werner.de/sqliteodbc/"
         Case Else:
             Err.Raise e, TypeName(Me)
     End Select
 End Sub
+
+Private Function CanUsed() As Boolean
+    Const SQLITE3_ODBC_DISPLAY_NAME_32 As String = "SQLite ODBC Driver (remove only)"
+    Const SQLITE3_ODBC_DISPLAY_NAME_64 As String = "SQLite ODBC Driver for Win64 (remove only)"
+    
+    CanUsed = Win.HasInstalled(SQLITE3_ODBC_DISPLAY_NAME_32) And Win.HasInstalled(SQLITE3_ODBC_DISPLAY_NAME_64)
+End Function
 
 Private Sub ReadyCheck()
     If Not mReady Then
         Call ErrRaise(514)
     End If
 End Sub
-
 
